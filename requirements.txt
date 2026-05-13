@@ -1,0 +1,6 @@
+opencv-python
+onnxruntime
+numpy
+pystray
+Pillow
+pyinstaller
