@@ -62,6 +62,7 @@ class MacOSWindowManager(BaseWindowManager):
             VS Code 窗口信息或 None
         """
         if not MACOS_AVAILABLE:
+            logger.error("macOS 库不可用")
             return None
 
         try:
@@ -86,12 +87,15 @@ class MacOSWindowManager(BaseWindowManager):
 
                 # 检查应用名称或 bundle ID
                 if app_name in vscode_names or bundle_id in vscode_bundle_ids:
+                    logger.info(f"找到 VS Code: {app_name} ({bundle_id})")
                     return {
                         'app_name': app_name,
                         'bundle_id': bundle_id,
                         'pid': app.processIdentifier(),
                         'app': app
                     }
+
+            logger.info("未找到运行中的 VS Code")
 
         except Exception as e:
             logger.error(f"查找 VS Code 窗口失败: {e}")
@@ -108,6 +112,7 @@ class MacOSWindowManager(BaseWindowManager):
             是否成功激活
         """
         if not MACOS_AVAILABLE:
+            logger.error("macOS 库不可用")
             return False
 
         if not window:
@@ -117,26 +122,40 @@ class MacOSWindowManager(BaseWindowManager):
         try:
             # 如果窗口信息包含 NSRunningApplication 对象
             if 'app' in window:
+                logger.info(f"尝试激活窗口: {window.get('app_name', 'Unknown')}")
                 app = window['app']
-                success = app.activateWithOptions_(1 << 1)  # NSApplicationActivateIgnoringOtherApps
-                if success:
-                    logger.info(f"成功激活窗口: {window.get('app_name', 'Unknown')}")
-                    return True
+
+                # 尝试多次激活
+                for attempt in range(2):
+                    success = app.activateWithOptions_(1 << 1)  # NSApplicationActivateIgnoringOtherApps
+                    if success:
+                        logger.info(f"成功激活窗口: {window.get('app_name', 'Unknown')}")
+                        time.sleep(0.3)  # 给系统一点时间切换
+                        return True
+                    logger.warning(f"激活尝试 {attempt+1} 失败,重试...")
+                    time.sleep(0.2)
+
+                logger.error(f"激活窗口失败 (所有尝试都失败): {window.get('app_name', 'Unknown')}")
 
             # 如果只有 bundle_id，尝试通过 bundle_id 激活
             elif 'bundle_id' in window:
                 bundle_id = window['bundle_id']
+                logger.info(f"尝试通过 bundle_id 激活: {bundle_id}")
                 workspace = NSWorkspace.sharedWorkspace()
                 success = workspace.launchAppWithBundleIdentifier_options_additionalEventParamDescriptor_launchIdentifier_(
                     bundle_id, 1 << 1, None, None
                 )
                 if success:
                     logger.info(f"成功激活应用: {bundle_id}")
+                    time.sleep(0.3)
                     return True
+                else:
+                    logger.error(f"激活应用失败 (launchApp 返回 False): {bundle_id}")
 
             # 如果有应用名称，尝试使用 open 命令
             elif 'app_name' in window:
                 app_name = window['app_name']
+                logger.info(f"尝试使用 open 命令激活: {app_name}")
                 result = subprocess.run(
                     ['open', '-a', app_name],
                     capture_output=True,
@@ -145,10 +164,14 @@ class MacOSWindowManager(BaseWindowManager):
                 )
                 if result.returncode == 0:
                     logger.info(f"成功激活应用: {app_name}")
+                    time.sleep(0.3)
                     return True
+                else:
+                    logger.error(f"open 命令失败: {result.stderr}")
 
         except Exception as e:
-            logger.error(f"激活窗口失败: {e}")
+            logger.error(f"激活窗口异常: {e}")
+            logger.exception("详细错误:")
 
         return False
 
@@ -172,6 +195,8 @@ class MacOSWindowManager(BaseWindowManager):
                     logger.info("VS Code 启动成功")
                     time.sleep(1)  # 等待应用启动
                     return True
+                else:
+                    logger.error(f"启动失败: {result.stderr}")
 
             # 尝试常见的 VS Code 名称
             vscode_names = [
@@ -191,12 +216,15 @@ class MacOSWindowManager(BaseWindowManager):
                     logger.info(f"VS Code 启动成功: {name}")
                     time.sleep(1)  # 等待应用启动
                     return True
+                else:
+                    logger.warning(f"启动 {name} 失败: {result.stderr}")
 
-            logger.error("无法启动 VS Code")
+            logger.error("无法启动 VS Code - 所有尝试都失败了")
             return False
 
         except Exception as e:
-            logger.error(f"启动 VS Code 失败: {e}")
+            logger.error(f"启动 VS Code 异常: {e}")
+            logger.exception("详细错误:")
             return False
 
     def is_window_valid(self, window: Any) -> bool:

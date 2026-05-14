@@ -24,6 +24,8 @@ class MainController:
         self.camera_monitor = None
         self.tray_icon = None
         self._running = False
+        self._last_switch_attempt = 0  # 上次切换尝试的时间
+        self._switch_cooldown = 3.0  # 切换失败后的冷却时间(秒)
 
     def initialize(self) -> bool:
         """初始化所有模块
@@ -154,7 +156,14 @@ class MainController:
             # 监控状态：检测到多人时切换到 VS Code
             if current_state == State.MONITORING:
                 if face_count >= min_faces:
+                    # 检查冷却时间
+                    current_time = time.time()
+                    if current_time - self._last_switch_attempt < self._switch_cooldown:
+                        logger.debug(f"切换冷却中，跳过本次尝试")
+                        return
+
                     logger.info(f"检测到 {face_count} 人，准备切换到 VS Code")
+                    self._last_switch_attempt = current_time
                     self._switch_to_vscode()
 
             # 已切换状态：检测到单人或无人时考虑切回

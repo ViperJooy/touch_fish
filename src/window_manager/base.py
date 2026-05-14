@@ -60,13 +60,35 @@ class BaseWindowManager(ABC):
         Returns:
             是否成功
         """
+        from src.utils.logger import logger
+
         # 先尝试查找已运行的 VS Code 窗口
         vscode_window = self.find_vscode_window()
         if vscode_window:
-            return self.activate_window(vscode_window)
+            logger.info("找到运行中的 VS Code,尝试激活")
+            if self.activate_window(vscode_window):
+                return True
+            logger.warning("激活失败,尝试重新启动")
 
-        # 如果没有找到，尝试启动
-        return self.launch_vscode()
+        # 如果没有找到或激活失败,尝试启动
+        logger.info("启动 VS Code")
+        if not self.launch_vscode():
+            logger.error("启动 VS Code 失败")
+            return False
+
+        # 启动后等待并重试激活
+        import time
+        for i in range(3):
+            time.sleep(1)
+            logger.info(f"等待 VS Code 启动... (尝试 {i+1}/3)")
+            vscode_window = self.find_vscode_window()
+            if vscode_window:
+                logger.info("VS Code 已启动,尝试激活")
+                if self.activate_window(vscode_window):
+                    return True
+
+        logger.error("启动 VS Code 后无法激活")
+        return False
 
     @abstractmethod
     def is_window_valid(self, window: Any) -> bool:
