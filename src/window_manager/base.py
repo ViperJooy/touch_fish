@@ -13,7 +13,19 @@ class BaseWindowManager(ABC):
             config: 配置字典
         """
         self._config = config
-        self._target_app = config.get("target_app", "Visual Studio Code")
+        self._target_apps = config.get("target_apps", [
+            {"min_faces": 1, "app": "Google Chrome"},
+            {"min_faces": 2, "app": "Visual Studio Code"}
+        ])
+        self._target_app = self._target_apps[0]["app"]
+
+    def set_target_app(self, app_name: str):
+        """设置当前目标应用
+
+        Args:
+            app_name: 应用名称
+        """
+        self._target_app = app_name
 
     @abstractmethod
     def get_active_window(self) -> Optional[Any]:

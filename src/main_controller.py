@@ -150,21 +150,18 @@ class MainController:
                 return
 
             current_state = self.state_manager.get_state()
-            config = self.config_manager._config
-            min_faces = config.get("min_faces_to_switch", 2)
 
-            # 监控状态：检测到多人时切换到目标应用
+            # 监控状态：检测到人脸时切换到目标应用
             if current_state == State.MONITORING:
-                if face_count >= min_faces:
-                    # 检查冷却时间
+                if face_count >= 1:
                     current_time = time.time()
                     if current_time - self._last_switch_attempt < self._switch_cooldown:
                         logger.debug(f"切换冷却中，跳过本次尝试")
                         return
 
-                    logger.info(f"检测到多人，准备切换")
+                    logger.info(f"检测到 {face_count} 人，准备切换")
                     self._last_switch_attempt = current_time
-                    self._switch_to_target()
+                    self._switch_to_target(face_count)
 
             # 已切换状态：检测到单人或无人时考虑切回
             elif current_state == State.SWITCHED:
@@ -186,26 +183,40 @@ class MainController:
             logger.error(f"处理检测结果时出错: {e}")
             logger.exception("详细错误信息:")
 
-    def _switch_to_target(self):
-        """切换到目标应用"""
+    def _switch_to_target(self, face_count: int):
+        """切换到目标应用
+
+        Args:
+            face_count: 当前检测到的人脸数量
+        """
         try:
-            # 记录当前窗口
+            config = self.config_manager._config
+            target_apps = config.get("target_apps", [
+                {"min_faces": 1, "app": "Google Chrome"},
+                {"min_faces": 2, "app": "Visual Studio Code"}
+            ])
+
+            target_name = None
+            for entry in reversed(target_apps):
+                if face_count >= entry.get("min_faces", 1):
+                    target_name = entry["app"]
+                    break
+            target_name = target_name or target_apps[-1]["app"]
+
+            self.window_manager.set_target_app(target_name)
+
             current_window = self.window_manager.get_active_window()
             if current_window:
                 self.state_manager.record_previous_window(current_window)
                 logger.info(f"记录当前窗口: {current_window.get('app_name', current_window.get('title', 'Unknown'))}")
 
-            target_name = self.window_manager._target_app
-            # 激活或启动目标应用
             success = self.window_manager.activate_or_launch_target_app()
 
             if success:
-                # 切换成功，更新状态
                 self.state_manager.set_state(State.SWITCHED)
                 self.state_manager.record_switch_time()
                 logger.info(f"成功切换到 {target_name}")
 
-                # 更新托盘图标状态
                 if self.tray_icon:
                     self.tray_icon.update_status(State.SWITCHED, 0)
             else:
