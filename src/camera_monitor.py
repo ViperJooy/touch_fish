@@ -93,9 +93,6 @@ class CameraMonitor:
                 # 人脸检测
                 face_count = self._face_detector.detect_faces(frame)
 
-                # 记录检测到的人脸数量
-                logger.info(f"检测到人脸数量: {face_count}")
-
                 # 更新当前人脸数量
                 with self._lock:
                     self._current_face_count = face_count

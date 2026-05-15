@@ -1,0 +1,38 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TouchFishGuard-${{ matrix.os }}
+          path: dist/

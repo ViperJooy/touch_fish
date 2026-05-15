@@ -103,7 +103,6 @@ class FaceDetector:
             keep_indices = self._nms(boxes, scores, self._nms_threshold)
 
             face_count = len(keep_indices)
-            logger.debug(f"检测到 {face_count} 张人脸")
 
             return face_count
 

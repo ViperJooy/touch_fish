@@ -162,7 +162,7 @@ class MainController:
                         logger.debug(f"切换冷却中，跳过本次尝试")
                         return
 
-                    logger.info(f"检测到 {face_count} 人，准备切换到 VS Code")
+                    logger.info(f"检测到多人，准备切换到 VS Code")
                     self._last_switch_attempt = current_time
                     self._switch_to_vscode()
 
@@ -173,14 +173,13 @@ class MainController:
                     can_switch_back = self.state_manager.update_switch_back_confirmation(face_count)
 
                     if can_switch_back:
-                        logger.info(f"连续检测到 {face_count} 人，准备切回原窗口")
+                        logger.info(f"连续检测通过，准备切回原窗口")
                         self._switch_back()
                     else:
                         progress = self.state_manager.get_switch_back_progress()
                         logger.debug(f"切回确认进度: {progress[0]}/{progress[1]}")
                 else:
                     # 检测到多人，重置切回计数
-                    logger.debug(f"检测到 {face_count} 人，重置切回计数")
                     self.state_manager.update_switch_back_confirmation(face_count)
 
         except Exception as e:
