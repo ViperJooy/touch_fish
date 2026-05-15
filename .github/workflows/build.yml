@@ -55,10 +55,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-assets
-          mv TouchFishGuard-ubuntu-latest/* release-assets/TouchFishGuard-linux-x86_64
-          mv TouchFishGuard-macos-latest/* release-assets/TouchFishGuard-macos-x86_64
-          mv TouchFishGuard-windows-latest/TouchFishGuard.exe release-assets/TouchFishGuard-windows-x86_64.exe
-          ls -la release-assets/
+
+          # Linux
+          cp TouchFishGuard-ubuntu-latest/TouchFishGuard release-assets/TouchFishGuard-linux-x86_64
+
+          # macOS (.app is a directory, zip it for distribution)
+          cd TouchFishGuard-macos-latest && zip -r ../release-assets/TouchFishGuard-macos-x86_64.zip TouchFishGuard.app && cd ..
+
+          # Windows
+          cp TouchFishGuard-windows-latest/TouchFishGuard.exe release-assets/TouchFishGuard-windows-x86_64.exe
+
+          ls -lh release-assets/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
