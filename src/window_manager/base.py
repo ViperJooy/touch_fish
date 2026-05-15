@@ -13,7 +13,7 @@ class BaseWindowManager(ABC):
             config: 配置字典
         """
         self._config = config
-        self._vscode_path = config.get("vscode_path", "auto")
+        self._target_app = config.get("target_app", "Visual Studio Code")
 
     @abstractmethod
     def get_active_window(self) -> Optional[Any]:
@@ -25,11 +25,11 @@ class BaseWindowManager(ABC):
         pass
 
     @abstractmethod
-    def find_vscode_window(self) -> Optional[Any]:
-        """查找 VS Code 窗口
+    def find_target_window(self) -> Optional[Any]:
+        """查找目标应用窗口
 
         Returns:
-            VS Code 窗口对象或 None
+            目标应用窗口对象或 None
         """
         pass
 
@@ -46,48 +46,47 @@ class BaseWindowManager(ABC):
         pass
 
     @abstractmethod
-    def launch_vscode(self) -> bool:
-        """启动 VS Code
+    def launch_target_app(self) -> bool:
+        """启动目标应用
 
         Returns:
             是否成功启动
         """
         pass
 
-    def activate_or_launch_vscode(self) -> bool:
-        """激活或启动 VS Code
+    def activate_or_launch_target_app(self) -> bool:
+        """激活或启动目标应用
 
         Returns:
             是否成功
         """
         from src.utils.logger import logger
 
-        # 先尝试查找已运行的 VS Code 窗口
-        vscode_window = self.find_vscode_window()
-        if vscode_window:
-            logger.info("找到运行中的 VS Code,尝试激活")
-            if self.activate_window(vscode_window):
+        target_name = self._target_app
+
+        target_window = self.find_target_window()
+        if target_window:
+            logger.info(f"找到运行中的 {target_name},尝试激活")
+            if self.activate_window(target_window):
                 return True
             logger.warning("激活失败,尝试重新启动")
 
-        # 如果没有找到或激活失败,尝试启动
-        logger.info("启动 VS Code")
-        if not self.launch_vscode():
-            logger.error("启动 VS Code 失败")
+        logger.info(f"启动 {target_name}")
+        if not self.launch_target_app():
+            logger.error(f"启动 {target_name} 失败")
             return False
 
-        # 启动后等待并重试激活
         import time
         for i in range(3):
             time.sleep(1)
-            logger.info(f"等待 VS Code 启动... (尝试 {i+1}/3)")
-            vscode_window = self.find_vscode_window()
-            if vscode_window:
-                logger.info("VS Code 已启动,尝试激活")
-                if self.activate_window(vscode_window):
+            logger.info(f"等待 {target_name} 启动... (尝试 {i+1}/3)")
+            target_window = self.find_target_window()
+            if target_window:
+                logger.info(f"{target_name} 已启动,尝试激活")
+                if self.activate_window(target_window):
                     return True
 
-        logger.error("启动 VS Code 后无法激活")
+        logger.error(f"启动 {target_name} 后无法激活")
         return False
 
     @abstractmethod

@@ -55,39 +55,28 @@ class MacOSWindowManager(BaseWindowManager):
 
         return None
 
-    def find_vscode_window(self) -> Optional[Any]:
-        """查找 VS Code 窗口
+    def find_target_window(self) -> Optional[Any]:
+        """查找目标应用窗口
 
         Returns:
-            VS Code 窗口信息或 None
+            目标应用窗口信息或 None
         """
         if not MACOS_AVAILABLE:
             logger.error("macOS 库不可用")
             return None
 
+        target_name = self._target_app
+
         try:
             workspace = NSWorkspace.sharedWorkspace()
             running_apps = workspace.runningApplications()
-
-            # 查找 VS Code 应用
-            vscode_names = [
-                'Visual Studio Code',
-                'Code',
-                'VSCode'
-            ]
-
-            vscode_bundle_ids = [
-                'com.microsoft.VSCode',
-                'com.visualstudio.code.oss'
-            ]
 
             for app in running_apps:
                 app_name = app.localizedName()
                 bundle_id = app.bundleIdentifier()
 
-                # 检查应用名称或 bundle ID
-                if app_name in vscode_names or bundle_id in vscode_bundle_ids:
-                    logger.info(f"找到 VS Code: {app_name} ({bundle_id})")
+                if app_name == target_name or bundle_id == target_name:
+                    logger.info(f"找到目标应用: {app_name} ({bundle_id})")
                     return {
                         'app_name': app_name,
                         'bundle_id': bundle_id,
@@ -95,10 +84,10 @@ class MacOSWindowManager(BaseWindowManager):
                         'app': app
                     }
 
-            logger.info("未找到运行中的 VS Code")
+            logger.info(f"未找到运行中的 {target_name}")
 
         except Exception as e:
-            logger.error(f"查找 VS Code 窗口失败: {e}")
+            logger.error(f"查找目标应用窗口失败: {e}")
 
         return None
 
@@ -120,24 +109,21 @@ class MacOSWindowManager(BaseWindowManager):
             return False
 
         try:
-            # 如果窗口信息包含 NSRunningApplication 对象
             if 'app' in window:
                 logger.info(f"尝试激活窗口: {window.get('app_name', 'Unknown')}")
                 app = window['app']
 
-                # 尝试多次激活
                 for attempt in range(2):
-                    success = app.activateWithOptions_(1 << 1)  # NSApplicationActivateIgnoringOtherApps
+                    success = app.activateWithOptions_(1 << 1)
                     if success:
                         logger.info(f"成功激活窗口: {window.get('app_name', 'Unknown')}")
-                        time.sleep(0.3)  # 给系统一点时间切换
+                        time.sleep(0.3)
                         return True
                     logger.warning(f"激活尝试 {attempt+1} 失败,重试...")
                     time.sleep(0.2)
 
                 logger.error(f"激活窗口失败 (所有尝试都失败): {window.get('app_name', 'Unknown')}")
 
-            # 如果只有 bundle_id，尝试通过 bundle_id 激活
             elif 'bundle_id' in window:
                 bundle_id = window['bundle_id']
                 logger.info(f"尝试通过 bundle_id 激活: {bundle_id}")
@@ -152,7 +138,6 @@ class MacOSWindowManager(BaseWindowManager):
                 else:
                     logger.error(f"激活应用失败 (launchApp 返回 False): {bundle_id}")
 
-            # 如果有应用名称，尝试使用 open 命令
             elif 'app_name' in window:
                 app_name = window['app_name']
                 logger.info(f"尝试使用 open 命令激活: {app_name}")
@@ -175,55 +160,34 @@ class MacOSWindowManager(BaseWindowManager):
 
         return False
 
-    def launch_vscode(self) -> bool:
-        """启动 VS Code
+    def launch_target_app(self) -> bool:
+        """启动目标应用
 
         Returns:
             是否成功启动
         """
+        target_name = self._target_app
+
         try:
-            # 如果配置了具体路径
-            if self._vscode_path and self._vscode_path != "auto":
-                logger.info(f"使用配置的路径启动 VS Code: {self._vscode_path}")
-                result = subprocess.run(
-                    ['open', '-a', self._vscode_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode == 0:
-                    logger.info("VS Code 启动成功")
-                    time.sleep(1)  # 等待应用启动
-                    return True
-                else:
-                    logger.error(f"启动失败: {result.stderr}")
+            logger.info(f"尝试启动目标应用: {target_name}")
+            result = subprocess.run(
+                ['open', '-a', target_name],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.info(f"目标应用启动成功: {target_name}")
+                time.sleep(1)
+                return True
+            else:
+                logger.warning(f"启动 {target_name} 失败: {result.stderr}")
 
-            # 尝试常见的 VS Code 名称
-            vscode_names = [
-                'Visual Studio Code',
-                'Code'
-            ]
-
-            for name in vscode_names:
-                logger.info(f"尝试启动 VS Code: {name}")
-                result = subprocess.run(
-                    ['open', '-a', name],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode == 0:
-                    logger.info(f"VS Code 启动成功: {name}")
-                    time.sleep(1)  # 等待应用启动
-                    return True
-                else:
-                    logger.warning(f"启动 {name} 失败: {result.stderr}")
-
-            logger.error("无法启动 VS Code - 所有尝试都失败了")
+            logger.error(f"无法启动目标应用: {target_name}")
             return False
 
         except Exception as e:
-            logger.error(f"启动 VS Code 异常: {e}")
+            logger.error(f"启动目标应用异常: {e}")
             logger.exception("详细错误:")
             return False
 
@@ -240,7 +204,6 @@ class MacOSWindowManager(BaseWindowManager):
             return False
 
         try:
-            # 如果有 PID，检查进程是否还在运行
             if 'pid' in window:
                 pid = window['pid']
                 workspace = NSWorkspace.sharedWorkspace()
@@ -250,7 +213,6 @@ class MacOSWindowManager(BaseWindowManager):
                     if app.processIdentifier() == pid:
                         return True
 
-            # 如果有 bundle_id，检查应用是否在运行
             if 'bundle_id' in window:
                 bundle_id = window['bundle_id']
                 workspace = NSWorkspace.sharedWorkspace()

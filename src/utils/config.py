@@ -8,7 +8,7 @@ class ConfigManager:
     """配置管理器"""
 
     DEFAULT_CONFIG = {
-        "vscode_path": "auto",
+        "target_app": "Visual Studio Code",
         "camera_index": 0,
         "detection_interval": 0.5,
         "min_faces_to_switch": 2,

@@ -54,36 +54,36 @@ class WindowsWindowManager(BaseWindowManager):
 
         return None
 
-    def find_vscode_window(self) -> Optional[Any]:
-        """查找 VS Code 窗口
+    def find_target_window(self) -> Optional[Any]:
+        """查找目标应用窗口
 
         Returns:
-            VS Code 窗口信息或 None
+            目标应用窗口信息或 None
         """
         if not WINDOWS_AVAILABLE:
             return None
 
-        vscode_window = [None]
+        target_name = self._target_app
+        target_window = [None]
 
         def enum_windows_callback(hwnd, _):
             if win32gui.IsWindowVisible(hwnd):
                 title = win32gui.GetWindowText(hwnd)
-                # VS Code 窗口标题通常包含 "Visual Studio Code"
-                if 'Visual Studio Code' in title or title.endswith('- Visual Studio Code'):
+                if target_name.lower() in title.lower():
                     _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                    vscode_window[0] = {
+                    target_window[0] = {
                         'hwnd': hwnd,
                         'title': title,
                         'pid': pid
                     }
-                    return False  # 停止枚举
+                    return False
             return True
 
         try:
             win32gui.EnumWindows(enum_windows_callback, None)
-            return vscode_window[0]
+            return target_window[0]
         except Exception as e:
-            logger.error(f"查找 VS Code 窗口失败: {e}")
+            logger.error(f"查找目标应用窗口失败: {e}")
             return None
 
     def activate_window(self, window: Any) -> bool:
@@ -105,11 +105,9 @@ class WindowsWindowManager(BaseWindowManager):
         try:
             hwnd = window['hwnd']
 
-            # 如果窗口最小化，先恢复
             if win32gui.IsIconic(hwnd):
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
 
-            # 激活窗口
             win32gui.SetForegroundWindow(hwnd)
             logger.info(f"成功激活窗口: {window.get('title', 'Unknown')}")
             return True
@@ -118,52 +116,33 @@ class WindowsWindowManager(BaseWindowManager):
             logger.error(f"激活窗口失败: {e}")
             return False
 
-    def launch_vscode(self) -> bool:
-        """启动 VS Code
+    def launch_target_app(self) -> bool:
+        """启动目标应用
 
         Returns:
             是否成功启动
         """
+        target_name = self._target_app
+
         try:
-            # 如果配置了具体路径
-            if self._vscode_path and self._vscode_path != "auto":
-                logger.info(f"使用配置的路径启动 VS Code: {self._vscode_path}")
-                subprocess.Popen([self._vscode_path])
-                time.sleep(2)  # 等待应用启动
-                return True
-
-            # 尝试常见的安装路径
-            common_paths = [
-                os.path.expandvars(r'%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe'),
-                os.path.expandvars(r'%PROGRAMFILES%\Microsoft VS Code\Code.exe'),
-                os.path.expandvars(r'%PROGRAMFILES(X86)%\Microsoft VS Code\Code.exe'),
-            ]
-
-            for path in common_paths:
-                if os.path.exists(path):
-                    logger.info(f"找到 VS Code: {path}")
-                    subprocess.Popen([path])
-                    time.sleep(2)  # 等待应用启动
-                    return True
-
-            # 尝试使用 code 命令
-            logger.info("尝试使用 code 命令启动 VS Code")
+            logger.info(f"尝试启动目标应用: {target_name}")
             result = subprocess.run(
-                ['code'],
+                ['start', target_name],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                shell=True
             )
             if result.returncode == 0:
-                logger.info("VS Code 启动成功")
+                logger.info(f"目标应用启动成功: {target_name}")
                 time.sleep(2)
                 return True
 
-            logger.error("无法启动 VS Code")
+            logger.error(f"无法启动目标应用: {target_name}")
             return False
 
         except Exception as e:
-            logger.error(f"启动 VS Code 失败: {e}")
+            logger.error(f"启动目标应用失败: {e}")
             return False
 
     def is_window_valid(self, window: Any) -> bool:
@@ -183,7 +162,6 @@ class WindowsWindowManager(BaseWindowManager):
 
         try:
             hwnd = window['hwnd']
-            # 检查窗口句柄是否仍然有效
             return win32gui.IsWindow(hwnd)
         except Exception as e:
             logger.error(f"检查窗口有效性失败: {e}")

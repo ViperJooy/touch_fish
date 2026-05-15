@@ -7,7 +7,7 @@ from enum import Enum
 class State(Enum):
     """应用状态枚举"""
     MONITORING = "MONITORING"  # 监控中
-    SWITCHED = "SWITCHED"      # 已切换到 VS Code
+    SWITCHED = "SWITCHED"      # 已切换到目标应用
     PAUSED = "PAUSED"          # 已暂停
     ERROR = "ERROR"            # 错误状态
 

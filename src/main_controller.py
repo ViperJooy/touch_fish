@@ -153,7 +153,7 @@ class MainController:
             config = self.config_manager._config
             min_faces = config.get("min_faces_to_switch", 2)
 
-            # 监控状态：检测到多人时切换到 VS Code
+            # 监控状态：检测到多人时切换到目标应用
             if current_state == State.MONITORING:
                 if face_count >= min_faces:
                     # 检查冷却时间
@@ -162,9 +162,9 @@ class MainController:
                         logger.debug(f"切换冷却中，跳过本次尝试")
                         return
 
-                    logger.info(f"检测到多人，准备切换到 VS Code")
+                    logger.info(f"检测到多人，准备切换")
                     self._last_switch_attempt = current_time
-                    self._switch_to_vscode()
+                    self._switch_to_target()
 
             # 已切换状态：检测到单人或无人时考虑切回
             elif current_state == State.SWITCHED:
@@ -186,8 +186,8 @@ class MainController:
             logger.error(f"处理检测结果时出错: {e}")
             logger.exception("详细错误信息:")
 
-    def _switch_to_vscode(self):
-        """切换到 VS Code"""
+    def _switch_to_target(self):
+        """切换到目标应用"""
         try:
             # 记录当前窗口
             current_window = self.window_manager.get_active_window()
@@ -195,23 +195,24 @@ class MainController:
                 self.state_manager.record_previous_window(current_window)
                 logger.info(f"记录当前窗口: {current_window.get('app_name', current_window.get('title', 'Unknown'))}")
 
-            # 激活或启动 VS Code
-            success = self.window_manager.activate_or_launch_vscode()
+            target_name = self.window_manager._target_app
+            # 激活或启动目标应用
+            success = self.window_manager.activate_or_launch_target_app()
 
             if success:
                 # 切换成功，更新状态
                 self.state_manager.set_state(State.SWITCHED)
                 self.state_manager.record_switch_time()
-                logger.info("成功切换到 VS Code")
+                logger.info(f"成功切换到 {target_name}")
 
                 # 更新托盘图标状态
                 if self.tray_icon:
                     self.tray_icon.update_status(State.SWITCHED, 0)
             else:
-                logger.error("切换到 VS Code 失败")
+                logger.error(f"切换到 {target_name} 失败")
 
         except Exception as e:
-            logger.error(f"切换到 VS Code 时出错: {e}")
+            logger.error(f"切换到目标应用时出错: {e}")
             logger.exception("详细错误信息:")
 
     def _switch_back(self):
