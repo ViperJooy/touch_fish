@@ -1,0 +1,23 @@
+[project]
+name = "touch-fish-guard"
+version = "1.0.0"
+description = "Touch Fish Guard - 人脸检测摸鱼守护工具"
+requires-python = ">=3.11"
+dependencies = [
+    "opencv-python",
+    "onnxruntime",
+    "numpy",
+    "pystray",
+    "Pillow",
+]
+
+[project.optional-dependencies]
+build = [
+    "pyinstaller",
+]
+
+[project.scripts]
+touch-fish = "src.main:main"
+
+[tool.uv]
+package = false
