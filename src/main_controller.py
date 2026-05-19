@@ -24,8 +24,7 @@ class MainController:
         self.camera_monitor = None
         self.tray_icon = None
         self._running = False
-        self._last_switch_attempt = 0  # 上次切换尝试的时间
-        self._switch_cooldown = 3.0  # 切换失败后的冷却时间(秒)
+        self._min_faces_to_switch = 2  # 触发切换的最小人脸数
 
     def initialize(self) -> bool:
         """初始化所有模块
@@ -47,6 +46,9 @@ class MainController:
             # 3. 初始化状态管理器
             logger.info("初始化状态管理器...")
             self.state_manager = StateManager(config)
+
+            # 读取切换阈值
+            self._min_faces_to_switch = config.get("min_faces_to_switch", 2)
 
             # 4. 初始化窗口管理器
             logger.info("初始化窗口管理器...")
@@ -134,6 +136,8 @@ class MainController:
             logger.info("收到中断信号，正在关闭...")
             self.shutdown()
 
+    _last_logged_faces = -1
+
     def _on_face_detection(self, face_count: int):
         """人脸检测回调
 
@@ -141,43 +145,32 @@ class MainController:
             face_count: 检测到的人脸数量
         """
         try:
-            # 如果处于暂停状态，忽略检测结果
-            if self.state_manager.is_paused():
-                return
+            # 人脸数变化时记录并触发相应操作
+            if face_count != self._last_logged_faces:
+                self._last_logged_faces = face_count
+                face_icons = {0: "🔴", 1: "🟢", 2: "🟡"}
+                icon = face_icons.get(face_count, "🟡")
+                logger.info(f"{icon} 人脸: {face_count}")
 
-            # 如果处于错误状态，忽略检测结果
-            if self.state_manager.is_error():
-                return
+                # 实时更新托盘显示
+                if self.tray_icon:
+                    self.tray_icon.update_status(
+                        self.state_manager.get_state(),
+                        face_count
+                    )
 
-            current_state = self.state_manager.get_state()
+                # 暂停或错误状态不执行操作
+                if self.state_manager.is_paused() or self.state_manager.is_error():
+                    return
 
-            # 监控状态：检测到人脸时切换到目标应用
-            if current_state == State.MONITORING:
-                if face_count >= 1:
-                    current_time = time.time()
-                    if current_time - self._last_switch_attempt < self._switch_cooldown:
-                        logger.debug(f"切换冷却中，跳过本次尝试")
-                        return
-
-                    logger.info(f"检测到 {face_count} 人，准备切换")
-                    self._last_switch_attempt = current_time
-                    self._switch_to_target(face_count)
-
-            # 已切换状态：检测到单人或无人时考虑切回
-            elif current_state == State.SWITCHED:
-                if face_count <= 1:
-                    # 更新切回确认
-                    can_switch_back = self.state_manager.update_switch_back_confirmation(face_count)
-
-                    if can_switch_back:
-                        logger.info(f"连续检测通过，准备切回原窗口")
+                if face_count == 1:
+                    # 1人回到座位：如果在VS Code上则切回原窗口
+                    if self.state_manager.is_switched():
                         self._switch_back()
-                    else:
-                        progress = self.state_manager.get_switch_back_progress()
-                        logger.debug(f"切回确认进度: {progress[0]}/{progress[1]}")
                 else:
-                    # 检测到多人，重置切回计数
-                    self.state_manager.update_switch_back_confirmation(face_count)
+                    # 0人（无人）或2人以上（有人靠近）：切换到VS Code
+                    if not self.state_manager.is_switched():
+                        self._switch_to_target(face_count)
 
         except Exception as e:
             logger.error(f"处理检测结果时出错: {e}")
@@ -196,26 +189,26 @@ class MainController:
                 {"min_faces": 2, "app": "Visual Studio Code"}
             ])
 
-            target_name = None
+            target_entry = None
             for entry in reversed(target_apps):
                 if face_count >= entry.get("min_faces", 1):
-                    target_name = entry["app"]
+                    target_entry = entry
                     break
-            target_name = target_name or target_apps[-1]["app"]
+            target_entry = target_entry or target_apps[-1]
+            target_name = target_entry["app"]
 
-            self.window_manager.set_target_app(target_name)
+            self.window_manager.set_target_app(target_entry)
 
             current_window = self.window_manager.get_active_window()
             if current_window:
                 self.state_manager.record_previous_window(current_window)
-                logger.info(f"记录当前窗口: {current_window.get('app_name', current_window.get('title', 'Unknown'))}")
 
             success = self.window_manager.activate_or_launch_target_app()
 
             if success:
                 self.state_manager.set_state(State.SWITCHED)
                 self.state_manager.record_switch_time()
-                logger.info(f"成功切换到 {target_name}")
+                logger.info(f"🔄 切换到 {target_name}  ─────────────────")
 
                 if self.tray_icon:
                     self.tray_icon.update_status(State.SWITCHED, 0)
@@ -250,7 +243,7 @@ class MainController:
             success = self.window_manager.activate_window(previous_window)
 
             if success:
-                logger.info("成功切回原窗口")
+                logger.info(f"↩️ 切回 {previous_window.get('app_name', '原窗口')}  ────────────────")
                 self.state_manager.set_state(State.MONITORING)
                 if self.tray_icon:
                     self.tray_icon.update_status(State.MONITORING, 0)

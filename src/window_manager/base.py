@@ -17,15 +17,28 @@ class BaseWindowManager(ABC):
             {"min_faces": 1, "app": "Google Chrome"},
             {"min_faces": 2, "app": "Visual Studio Code"}
         ])
+        self._target_entry = self._target_apps[0]
         self._target_app = self._target_apps[0]["app"]
+        self._launch_command = self._target_apps[0].get("launch_command")
 
-    def set_target_app(self, app_name: str):
+    def set_target_app(self, app_name_or_entry):
         """设置当前目标应用
 
         Args:
-            app_name: 应用名称
+            app_name_or_entry: 应用名称（字符串）或配置条目（字典，含 app 和可选 launch_command）
         """
-        self._target_app = app_name
+        if isinstance(app_name_or_entry, dict):
+            self._target_entry = app_name_or_entry
+            self._target_app = app_name_or_entry["app"]
+            self._launch_command = app_name_or_entry.get("launch_command")
+        else:
+            self._target_app = app_name_or_entry
+            self._launch_command = None
+            for entry in self._target_apps:
+                if entry["app"] == app_name_or_entry:
+                    self._target_entry = entry
+                    self._launch_command = entry.get("launch_command")
+                    break
 
     @abstractmethod
     def get_active_window(self) -> Optional[Any]:
@@ -78,27 +91,20 @@ class BaseWindowManager(ABC):
 
         target_window = self.find_target_window()
         if target_window:
-            logger.info(f"找到运行中的 {target_name},尝试激活")
             if self.activate_window(target_window):
                 return True
-            logger.warning("激活失败,尝试重新启动")
 
-        logger.info(f"启动 {target_name}")
         if not self.launch_target_app():
-            logger.error(f"启动 {target_name} 失败")
             return False
 
         import time
         for i in range(3):
             time.sleep(1)
-            logger.info(f"等待 {target_name} 启动... (尝试 {i+1}/3)")
             target_window = self.find_target_window()
             if target_window:
-                logger.info(f"{target_name} 已启动,尝试激活")
                 if self.activate_window(target_window):
                     return True
 
-        logger.error(f"启动 {target_name} 后无法激活")
         return False
 
     @abstractmethod
@@ -113,6 +119,7 @@ class BaseWindowManager(ABC):
         """
         pass
 
+    
 
 class UnsupportedPlatformError(Exception):
     """不支持的平台错误"""

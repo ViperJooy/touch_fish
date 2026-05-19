@@ -1,13 +1,10 @@
 {
   "target_apps": [
-    {"min_faces": 1, "app": "Google Chrome"},
     {"min_faces": 2, "app": "Visual Studio Code"}
   ],
   "camera_index": 0,
-  "detection_interval": 0.5,
-  "min_faces_to_switch": 2,
-  "switch_back_delay": 2.0,
-  "switch_back_confirm_count": 3,
+  "detection_interval": 0.3,
+
   "face_detector": {
     "backend": "ultra_light_onnx",
     "model_path": "models/ultra_light_face_detector.onnx",

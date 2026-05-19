@@ -76,7 +76,16 @@ class MacOSWindowManager(BaseWindowManager):
                 bundle_id = app.bundleIdentifier()
 
                 if app_name == target_name or bundle_id == target_name:
-                    logger.info(f"找到目标应用: {app_name} ({bundle_id})")
+                    return {
+                        'app_name': app_name,
+                        'bundle_id': bundle_id,
+                        'pid': app.processIdentifier(),
+                        'app': app
+                    }
+
+                # 支持模糊匹配：macOS 上 app 的 localizedName 可能与配置名不同
+                # 例如 "Visual Studio Code" 的 localizedName 是 "Code"
+                if target_name.lower() in app_name.lower() or app_name.lower() in target_name.lower():
                     return {
                         'app_name': app_name,
                         'bundle_id': bundle_id,
@@ -110,37 +119,25 @@ class MacOSWindowManager(BaseWindowManager):
 
         try:
             if 'app' in window:
-                logger.info(f"尝试激活窗口: {window.get('app_name', 'Unknown')}")
                 app = window['app']
 
                 for attempt in range(2):
                     success = app.activateWithOptions_(1 << 1)
                     if success:
-                        logger.info(f"成功激活窗口: {window.get('app_name', 'Unknown')}")
-                        time.sleep(0.3)
                         return True
-                    logger.warning(f"激活尝试 {attempt+1} 失败,重试...")
                     time.sleep(0.2)
-
-                logger.error(f"激活窗口失败 (所有尝试都失败): {window.get('app_name', 'Unknown')}")
 
             elif 'bundle_id' in window:
                 bundle_id = window['bundle_id']
-                logger.info(f"尝试通过 bundle_id 激活: {bundle_id}")
                 workspace = NSWorkspace.sharedWorkspace()
                 success = workspace.launchAppWithBundleIdentifier_options_additionalEventParamDescriptor_launchIdentifier_(
                     bundle_id, 1 << 1, None, None
                 )
                 if success:
-                    logger.info(f"成功激活应用: {bundle_id}")
-                    time.sleep(0.3)
                     return True
-                else:
-                    logger.error(f"激活应用失败 (launchApp 返回 False): {bundle_id}")
 
             elif 'app_name' in window:
                 app_name = window['app_name']
-                logger.info(f"尝试使用 open 命令激活: {app_name}")
                 result = subprocess.run(
                     ['open', '-a', app_name],
                     capture_output=True,
@@ -148,15 +145,10 @@ class MacOSWindowManager(BaseWindowManager):
                     timeout=5
                 )
                 if result.returncode == 0:
-                    logger.info(f"成功激活应用: {app_name}")
-                    time.sleep(0.3)
                     return True
-                else:
-                    logger.error(f"open 命令失败: {result.stderr}")
 
         except Exception as e:
             logger.error(f"激活窗口异常: {e}")
-            logger.exception("详细错误:")
 
         return False
 
@@ -167,28 +159,33 @@ class MacOSWindowManager(BaseWindowManager):
             是否成功启动
         """
         target_name = self._target_app
+        launch_command = self._launch_command
 
         try:
-            logger.info(f"尝试启动目标应用: {target_name}")
+            if launch_command:
+                if launch_command.endswith('.app'):
+                    cmd = ['open', launch_command]
+                elif launch_command.startswith('/'):
+                    cmd = [launch_command]
+                else:
+                    cmd = ['open', '-a', launch_command]
+            else:
+                cmd = ['open', '-a', target_name]
+
             result = subprocess.run(
-                ['open', '-a', target_name],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=10
             )
             if result.returncode == 0:
-                logger.info(f"目标应用启动成功: {target_name}")
                 time.sleep(1)
                 return True
-            else:
-                logger.warning(f"启动 {target_name} 失败: {result.stderr}")
 
-            logger.error(f"无法启动目标应用: {target_name}")
             return False
 
         except Exception as e:
             logger.error(f"启动目标应用异常: {e}")
-            logger.exception("详细错误:")
             return False
 
     def is_window_valid(self, window: Any) -> bool:
@@ -226,3 +223,5 @@ class MacOSWindowManager(BaseWindowManager):
             logger.error(f"检查窗口有效性失败: {e}")
 
         return False
+
+    

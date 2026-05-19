@@ -25,10 +25,14 @@ class StateManager:
         self._previous_window: Optional[Any] = None
         self._switch_time: float = 0.0
         self._switch_back_confirm_count_current: int = 0
+        self._switch_out_confirm_count_current: int = 0
 
         # 从配置读取参数
         self._switch_back_delay = config.get("switch_back_delay", 2.0)
         self._switch_back_confirm_count = config.get("switch_back_confirm_count", 3)
+        self._switch_out_confirm_count = config.get("switch_out_confirm_count", 3)
+        self._switch_back_cooldown = config.get("switch_back_cooldown", 5.0)
+        self._last_switch_back_time: float = 0.0
 
     def get_state(self) -> State:
         """获取当前状态
@@ -50,6 +54,7 @@ class StateManager:
         # 状态切换时的清理工作
         if old_state == State.SWITCHED and state == State.MONITORING:
             # 从 SWITCHED 回到 MONITORING 时重置切换追踪
+            self._last_switch_back_time = time.time()
             self.reset_switch_tracking()
 
     def record_previous_window(self, window: Any) -> None:
@@ -111,14 +116,13 @@ class StateManager:
         if self._state != State.SWITCHED:
             return False
 
-        # 如果检测到多人，重置计数
-        if face_count >= 2:
+        # 仅1人（用户回到座位）时计数，准备切回
+        # 0人（无人看守）或2人以上（有人靠近）时不切回
+        if face_count == 1:
+            self._switch_back_confirm_count_current += 1
+        else:
             self._switch_back_confirm_count_current = 0
             return False
-
-        # 如果检测到 0 或 1 人，增加计数
-        if face_count <= 1:
-            self._switch_back_confirm_count_current += 1
 
         # 检查是否达到切回条件
         return self.can_switch_back()
@@ -127,7 +131,55 @@ class StateManager:
         """重置切换追踪信息"""
         self._switch_time = 0.0
         self._switch_back_confirm_count_current = 0
+        self._switch_out_confirm_count_current = 0
         self._previous_window = None
+
+    def is_in_switch_back_cooldown(self, now: Optional[float] = None) -> bool:
+        """检查是否在切回保护期内
+
+        刚切回原窗口后的一段时间内，不触发切换出去，防止振荡。
+
+        Args:
+            now: 当前时间戳
+
+        Returns:
+            是否在保护期内
+        """
+        if now is None:
+            now = time.time()
+        return (now - self._last_switch_back_time) < self._switch_back_cooldown
+
+    def update_switch_out_confirmation(self, face_count: int, min_faces: int) -> bool:
+        """更新切换出去的确认计数
+
+        连续多帧检测到多人脸才真正切换，避免误触发。
+
+        Args:
+            face_count: 当前检测到的人脸数量
+            min_faces: 触发切换的最小人脸数
+
+        Returns:
+            是否达到切换条件
+        """
+        if self._state != State.MONITORING:
+            return False
+
+        # 不满足人脸数，重置计数
+        if face_count < min_faces:
+            self._switch_out_confirm_count_current = 0
+            return False
+
+        # 满足人脸数，累加确认
+        self._switch_out_confirm_count_current += 1
+        return self._switch_out_confirm_count_current >= self._switch_out_confirm_count
+
+    def get_switch_out_progress(self) -> tuple[int, int]:
+        """获取切换出去的确认进度
+
+        Returns:
+            (当前确认次数, 需要确认次数)
+        """
+        return (self._switch_out_confirm_count_current, self._switch_out_confirm_count)
 
     def is_monitoring(self) -> bool:
         """是否处于监控状态"""

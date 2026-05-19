@@ -8,6 +8,7 @@ from src.utils.logger import logger
 try:
     import pystray
     from PIL import Image, ImageDraw
+    from PyObjCTools import AppHelper
     TRAY_AVAILABLE = True
 except ImportError:
     TRAY_AVAILABLE = False
@@ -48,7 +49,7 @@ class TrayIcon:
                     enabled=False
                 ),
                 pystray.MenuItem(
-                    lambda text: f"检测到: {self._face_count} 人",
+                    lambda text, fc=self: f"检测到: {fc._face_count} 人",
                     self._show_status,
                     enabled=False
                 ),
@@ -99,17 +100,20 @@ class TrayIcon:
         self._current_state = state
         self._face_count = face_count
 
+        # 在主线程更新 UI（pystray 的 setter 不是线程安全的）
         if self._icon:
-            # 更新图标
-            icon_image = self._create_icon_image(state)
-            self._icon.icon = icon_image
+            AppHelper.callAfter(self._do_update, state, face_count)
 
-            # 更新标题
-            status_text = self._get_status_text(state, face_count)
-            self._icon.title = f"Touch Fish Guard - {status_text}"
+    def _do_update(self, state: State, face_count: int):
+        """在主线程执行实际的 UI 更新"""
+        icon_image = self._create_icon_image(state)
+        self._icon.icon = icon_image
+        status_text = self._get_status_text(state, face_count)
+        self._icon.title = f"Touch Fish Guard - {status_text}"
+        self._icon.update_menu()
 
     def _create_icon_image(self, state: State) -> Image.Image:
-        """创建图标图像
+        """创建图标图像 - 简约小鱼造型
 
         Args:
             state: 当前状态
@@ -117,7 +121,6 @@ class TrayIcon:
         Returns:
             图标图像
         """
-        # 根据状态选择颜色
         color_map = {
             State.MONITORING: (0, 200, 0),      # 绿色
             State.SWITCHED: (255, 200, 0),      # 黄色
@@ -127,19 +130,25 @@ class TrayIcon:
 
         color = color_map.get(state, (128, 128, 128))
 
-        # 创建简单的圆形图标
         size = 64
-        image = Image.new('RGB', (size, size), (255, 255, 255))
+        image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
 
-        # 绘制圆形
-        margin = 8
-        draw.ellipse(
-            [margin, margin, size - margin, size - margin],
-            fill=color,
-            outline=(0, 0, 0),
-            width=2
-        )
+        # 鱼身 - 椭圆形
+        body_bbox = [8, 18, 46, 46]
+        draw.ellipse(body_bbox, fill=color)
+
+        # 鱼尾 - 三角形
+        tail = [(42, 24), (42, 40), (58, 32)]
+        draw.polygon(tail, fill=color)
+
+        # 鱼眼 - 白色小圆
+        draw.ellipse([16, 26, 24, 34], fill=(255, 255, 255))
+        draw.ellipse([19, 29, 23, 33], fill=(0, 0, 0))
+
+        # 鱼鳍 - 小三角
+        fin = [(22, 18), (30, 18), (26, 12)]
+        draw.polygon(fin, fill=color)
 
         return image
 
